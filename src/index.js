@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import crypto from 'crypto';
 import express from 'express';
 import cors from 'cors';
 import { rateLimit } from 'express-rate-limit';
@@ -10,19 +11,48 @@ import {
   buildModelsResponse,
 } from './openai-compat.js';
 
-const app                = express();
-const PORT               = process.env.PORT || 3030;
-const ANTHROPIC_API_KEY  = process.env.ANTHROPIC_API_KEY;
-const OPENAI_API_KEY     = process.env.OPENAI_API_KEY;
-const PROXY_API_KEY      = process.env.PROXY_API_KEY;
-const RATE_LIMIT_RPM     = parseInt(process.env.RATE_LIMIT_PER_MIN || '60', 10);
-const CORS_ORIGIN        = process.env.CORS_ORIGIN || '*';
+const app               = express();
+const PORT              = process.env.PORT || 3030;
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const OPENAI_API_KEY    = process.env.OPENAI_API_KEY;
+const PROXY_API_KEY     = process.env.PROXY_API_KEY;
+const RATE_LIMIT_RPM    = parseInt(process.env.RATE_LIMIT_PER_MIN || '60', 10);
+const CORS_ORIGIN       = process.env.CORS_ORIGIN || '*';
+const REQUEST_TIMEOUT   = parseInt(process.env.REQUEST_TIMEOUT_MS || '120000', 10);
 
 // ── Startup validation ────────────────────────────────────────────────────────
 
 if (!ANTHROPIC_API_KEY) {
   console.error('[ERROR] ANTHROPIC_API_KEY is not set. Add it to your .env file.');
   process.exit(1);
+}
+
+if (!ANTHROPIC_API_KEY.startsWith('sk-ant-')) {
+  console.warn('[WARN] ANTHROPIC_API_KEY does not look like a valid Anthropic key (expected sk-ant-...)');
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function timingSafeEqual(a, b) {
+  try {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length !== bufB.length) {
+      // Still run comparison to avoid timing leak on length difference
+      crypto.timingSafeEqual(bufA, Buffer.alloc(bufA.length));
+      return false;
+    }
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
+
+function makeFetchWithTimeout(url, options) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(timer));
 }
 
 // ── Middleware ────────────────────────────────────────────────────────────────
@@ -43,8 +73,8 @@ app.use((req, res, next) => {
     const keyHeader  = req.headers['x-api-key'] || '';
     const provided   = authHeader.replace('Bearer ', '').trim() || keyHeader.trim();
 
-    if (provided !== PROXY_API_KEY) {
-      return res.status(401).json({ error: 'Unauthorized. Invalid or missing API key.' });
+    if (!provided || !timingSafeEqual(provided, PROXY_API_KEY)) {
+      return res.status(401).json({ error: 'Unauthorized.' });
     }
   }
 
@@ -54,12 +84,12 @@ app.use((req, res, next) => {
 // Rate limiting
 if (RATE_LIMIT_RPM > 0) {
   app.use(rateLimit({
-    windowMs:       60 * 1000,
-    limit:          RATE_LIMIT_RPM,
+    windowMs:        60 * 1000,
+    limit:           RATE_LIMIT_RPM,
     standardHeaders: 'draft-8',
-    legacyHeaders:  false,
-    message:        { error: 'Too many requests. Try again in a minute.' },
-    skip:           (req) => req.path === '/health',
+    legacyHeaders:   false,
+    message:         { error: 'Too many requests. Try again in a minute.' },
+    skip:            (req) => req.path === '/health',
   }));
 }
 
@@ -92,6 +122,11 @@ app.get('/v1/models', (req, res) => {
 app.post('/v1/chat/completions', async (req, res) => {
   const start = Date.now();
   const body  = req.body;
+
+  if (!body || typeof body !== 'object') {
+    return res.status(400).json({ error: 'Request body must be a JSON object.' });
+  }
+
   const isGpt = typeof body.model === 'string' && body.model.startsWith('gpt-');
 
   // Route gpt-* models to OpenAI directly if key is provided
@@ -111,12 +146,12 @@ app.post('/v1/chat/completions', async (req, res) => {
   try {
     anthropicBody = toAnthropicRequest(body);
   } catch (err) {
-    return res.status(400).json({ error: `Request translation failed: ${err.message}` });
+    return res.status(400).json({ error: `Invalid request: ${err.message}` });
   }
 
   let upstream;
   try {
-    upstream = await fetch('https://api.anthropic.com/v1/messages', {
+    upstream = await makeFetchWithTimeout('https://api.anthropic.com/v1/messages', {
       method:  'POST',
       headers: {
         'content-type':      'application/json',
@@ -126,15 +161,18 @@ app.post('/v1/chat/completions', async (req, res) => {
       body: JSON.stringify(anthropicBody),
     });
   } catch (err) {
+    const isTimeout = err.name === 'AbortError';
     console.error('[ERROR] Upstream request failed:', err.message);
-    return res.status(502).json({ error: 'Bad gateway. Could not reach the upstream API.' });
+    return res.status(isTimeout ? 504 : 502).json({
+      error: isTimeout ? 'Request timed out.' : 'Could not reach the upstream API.',
+    });
   }
 
   if (!upstream.ok) {
     const errorBody = await upstream.text();
-    console.log(`  [openai-compat] upstream error ${upstream.status}`);
+    console.error(`  [openai-compat] upstream error ${upstream.status}`);
     let parsed;
-    try { parsed = JSON.parse(errorBody); } catch (_) { parsed = { error: errorBody }; }
+    try { parsed = JSON.parse(errorBody); } catch { parsed = { error: 'Upstream error.' }; }
     return res.status(upstream.status).json(parsed);
   }
 
@@ -143,7 +181,16 @@ app.post('/v1/chat/completions', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
-    await streamAnthropicToOpenAI(upstream, res, anthropicBody.model);
+    try {
+      await streamAnthropicToOpenAI(upstream, res, anthropicBody.model);
+    } catch (err) {
+      console.error('[ERROR] Stream error:', err.message);
+      // Can't change status at this point — send SSE error event
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ error: 'Stream interrupted.' })}\n\n`);
+        res.end();
+      }
+    }
     const elapsed = Date.now() - start;
     console.log(`  [openai-compat] stream done (${elapsed}ms)`);
     return;
@@ -158,11 +205,11 @@ app.post('/v1/chat/completions', async (req, res) => {
   res.json(oaiResp);
 });
 
-// Proxy GPT models to OpenAI directly (no translation needed)
+// Proxy gpt-* models to OpenAI directly (no translation needed)
 async function proxyToOpenAI(req, res) {
   let upstream;
   try {
-    upstream = await fetch('https://api.openai.com/v1/chat/completions', {
+    upstream = await makeFetchWithTimeout('https://api.openai.com/v1/chat/completions', {
       method:  'POST',
       headers: {
         'content-type':  'application/json',
@@ -171,7 +218,10 @@ async function proxyToOpenAI(req, res) {
       body: JSON.stringify(req.body),
     });
   } catch (err) {
-    return res.status(502).json({ error: 'Bad gateway. Could not reach OpenAI.' });
+    const isTimeout = err.name === 'AbortError';
+    return res.status(isTimeout ? 504 : 502).json({
+      error: isTimeout ? 'Request timed out.' : 'Could not reach OpenAI.',
+    });
   }
 
   res.status(upstream.status);
@@ -184,8 +234,9 @@ async function proxyToOpenAI(req, res) {
 }
 
 // Native Anthropic passthrough — for Claude Code and Anthropic SDK users
+// Uses req.originalUrl to preserve query strings
 app.all('/v1/*', async (req, res) => {
-  const targetUrl = `https://api.anthropic.com${req.path}`;
+  const targetUrl = `https://api.anthropic.com${req.originalUrl}`;
 
   const headers = {
     'content-type':      'application/json',
@@ -199,7 +250,7 @@ app.all('/v1/*', async (req, res) => {
 
   let upstream;
   try {
-    upstream = await fetch(targetUrl, {
+    upstream = await makeFetchWithTimeout(targetUrl, {
       method:  req.method,
       headers,
       body:    req.method !== 'GET' && req.method !== 'HEAD'
@@ -207,8 +258,11 @@ app.all('/v1/*', async (req, res) => {
         : undefined,
     });
   } catch (err) {
+    const isTimeout = err.name === 'AbortError';
     console.error('[ERROR] Upstream request failed:', err.message);
-    return res.status(502).json({ error: 'Bad gateway. Could not reach the upstream API.' });
+    return res.status(isTimeout ? 504 : 502).json({
+      error: isTimeout ? 'Request timed out.' : 'Could not reach the upstream API.',
+    });
   }
 
   res.status(upstream.status);
@@ -230,9 +284,10 @@ app.use((req, res) => {
 app.listen(PORT, () => {
   console.log(`\n  AI Proxy running on http://localhost:${PORT}`);
   console.log(`  Anthropic API:    enabled`);
-  console.log(`  OpenAI API:       ${OPENAI_API_KEY ? 'enabled (gpt-* models will route to OpenAI)' : 'disabled (set OPENAI_API_KEY to enable)'}`);
+  console.log(`  OpenAI API:       ${OPENAI_API_KEY ? 'enabled (gpt-* models route to OpenAI)' : 'disabled (set OPENAI_API_KEY to enable)'}`);
   console.log(`  Auth:             ${PROXY_API_KEY ? 'enabled' : 'disabled (set PROXY_API_KEY to enable)'}`);
   console.log(`  Rate limit:       ${RATE_LIMIT_RPM > 0 ? `${RATE_LIMIT_RPM} req/min per IP` : 'disabled'}`);
   console.log(`  CORS:             ${CORS_ORIGIN}`);
+  console.log(`  Request timeout:  ${REQUEST_TIMEOUT / 1000}s`);
   console.log(`  Health check:     http://localhost:${PORT}/health\n`);
 });
