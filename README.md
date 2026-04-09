@@ -1,30 +1,16 @@
 # AI Proxy
 
-A free, open-source local proxy that connects your AI tools to any AI provider API.
+A free, open-source local proxy that routes your AI tool requests to any AI provider.
 Run it once on your machine — every tool you use connects through it.
 
 > **⚠️ Bring Your Own API Key (BYOK)**
-> This proxy does not provide any AI credits. You bring your own API key from any provider (Anthropic, OpenAI, etc.).
-> Get an Anthropic key at [platform.claude.com](https://platform.claude.com) and add credits under Billing.
-> Without credits you will get a `"Your credit balance is too low"` error.
-> A $5 top-up is more than enough to get started.
+> This proxy does not provide any AI credits or API access.
+> Its only job is to route requests from your tools to your chosen AI provider.
+> You bring your own API key — the proxy never touches your credits or bills you anything.
 
 ---
 
-## Why Use This?
-
-Most developers today pay for proxy services they don't need to pay for.
-
-- **Free forever** — runs on your machine, zero ongoing cost
-- **No token markup** — your key talks directly to the provider at their published list price
-- **Your key stays local** — never sent to any third party, lives only in your `.env` file
-- **5-minute setup** — clone, add your key, done
-- **Works with every major AI tool** — Cursor, VS Code, Open WebUI, LangChain, Claude Code
-- **No data stored** — the proxy forwards requests and returns responses, nothing is saved
-
----
-
-## How It Works
+## What It Does
 
 ```
 Your Tool (Claude Code / Cursor / VS Code / any app)
@@ -33,10 +19,23 @@ Your Tool (Claude Code / Cursor / VS Code / any app)
         ▼
   http://localhost:3030
         │
-        └──► your API provider (Anthropic / OpenAI / etc.)
+        └──► your AI provider (Anthropic / OpenAI / any compatible API)
 ```
 
-Your API key lives in one `.env` file on your machine — never shared, never uploaded.
+That's it. The proxy sits in the middle, forwards your requests, and returns the responses.
+Your API key lives only in your `.env` file — never shared, never uploaded, never logged.
+
+---
+
+## Why Use This?
+
+- **Free forever** — runs on your machine, zero ongoing cost
+- **No token markup** — your key talks directly to the provider at their published list price
+- **Works with any vendor** — Anthropic, OpenAI, or any OpenAI-compatible API
+- **Your key stays local** — never sent to any third party, lives only in your `.env` file
+- **5-minute setup** — clone, add your key, done
+- **Works with every major AI tool** — Cursor, VS Code, Open WebUI, LangChain, Claude Code
+- **No data stored** — the proxy forwards requests and returns responses, nothing is saved
 
 ---
 
@@ -286,4 +285,4 @@ To start again: `npm start`
 
 ## License
 
-MIT — free to use, modify, and share.
+[MIT](./LICENSE) — free to use, modify, and share. No restrictions.
