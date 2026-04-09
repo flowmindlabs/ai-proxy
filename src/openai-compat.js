@@ -189,7 +189,7 @@ export function toOpenAIResponse(data) {
 
 // ── Streaming translation: Anthropic SSE → OpenAI SSE ────────────────────────
 
-export async function streamAnthropicToOpenAI(upstream, res, model) {
+export async function streamAnthropicToOpenAI(upstream, res, model, onComplete) {
   let messageId      = `chatcmpl-${Date.now()}`;
   let currentToolIdx = -1;
   let stopReason     = 'stop';
@@ -287,6 +287,7 @@ export async function streamAnthropicToOpenAI(upstream, res, model) {
             sendChunk({}, stopReason);
             res.write('data: [DONE]\n\n');
             console.log(`  [stream] model=${model} in=${inputTokens} out=${outputTokens}`);
+            if (onComplete) onComplete({ tokensIn: inputTokens, tokensOut: outputTokens });
             break;
           }
         }
@@ -300,23 +301,21 @@ export async function streamAnthropicToOpenAI(upstream, res, model) {
 
 // ── Models list ───────────────────────────────────────────────────────────────
 
-export function buildModelsResponse() {
-  const models = [
+export function buildModelsResponse(extraModels = []) {
+  const claudeModels = [
     'claude-opus-4-6',
     'claude-sonnet-4-6',
     'claude-haiku-4-5-20251001',
     'claude-sonnet-4-5',
     'claude-3-5-sonnet-20241022',
     'claude-3-5-haiku-20241022',
-  ];
+  ].map(id => ({ id, object: 'model', created: 1700000000, owned_by: 'anthropic' }));
 
   return {
     object: 'list',
-    data: models.map(id => ({
-      id,
-      object:   'model',
-      created:  1700000000,
-      owned_by: 'anthropic',
-    })),
+    data: [
+      ...claudeModels,
+      ...extraModels,
+    ],
   };
 }
