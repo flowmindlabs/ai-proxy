@@ -1,30 +1,26 @@
 # AI Proxy
 
-A free, open-source local proxy that connects your AI tools to Anthropic (Claude) and OpenAI APIs.
+A free, open-source local proxy that connects your AI tools to any AI provider API.
 Run it once on your machine — every tool you use connects through it.
 
-> **⚠️ You need your own API key with credits loaded.**
-> Get an Anthropic key at [console.anthropic.com](https://console.anthropic.com) and add credits under Billing.
+> **⚠️ Bring Your Own API Key (BYOK)**
+> This proxy does not provide any AI credits. You bring your own API key from any provider (Anthropic, OpenAI, etc.).
+> Get an Anthropic key at [platform.claude.com](https://platform.claude.com) and add credits under Billing.
 > Without credits you will get a `"Your credit balance is too low"` error.
 > A $5 top-up is more than enough to get started.
 
 ---
 
-## Why Use This Instead of Paid Proxies?
+## Why Use This?
 
 Most developers today pay for proxy services they don't need to pay for.
 
-| | **This proxy** | LiteLLM | OpenRouter | Helicone |
-|---|---|---|---|---|
-| Cost | **Free** | Free (self-host) / Paid cloud | Paid per token | $20+/mo |
-| Token markup | **None — list price** | None | Yes | Yes |
-| Your key stays local | **Yes** | Yes | No | No |
-| Setup time | **5 minutes** | 30+ min (Python, Redis) | Account signup | Account signup |
-| Language | **Node.js** | Python | Cloud only | Cloud only |
-| Beginner friendly | **Yes** | No | Yes | Yes |
-| Data stored | **Nothing** | Depends | Yes | Yes |
-
-**Bottom line:** Your API key talks directly to Anthropic at published list prices. No middleman, no markup, no subscription.
+- **Free forever** — runs on your machine, zero ongoing cost
+- **No token markup** — your key talks directly to the provider at their published list price
+- **Your key stays local** — never sent to any third party, lives only in your `.env` file
+- **5-minute setup** — clone, add your key, done
+- **Works with every major AI tool** — Cursor, VS Code, Open WebUI, LangChain, Claude Code
+- **No data stored** — the proxy forwards requests and returns responses, nothing is saved
 
 ---
 
@@ -37,9 +33,7 @@ Your Tool (Claude Code / Cursor / VS Code / any app)
         ▼
   http://localhost:3030
         │
-        ├── Anthropic format ──► https://api.anthropic.com
-        └── OpenAI format ─────► translated to Anthropic internally
-                                  (or forwarded to OpenAI if you set OPENAI_API_KEY)
+        └──► your API provider (Anthropic / OpenAI / etc.)
 ```
 
 Your API key lives in one `.env` file on your machine — never shared, never uploaded.
@@ -49,7 +43,9 @@ Your API key lives in one `.env` file on your machine — never shared, never up
 ## Requirements
 
 - [Node.js 18+](https://nodejs.org) — download and install if you don't have it
-- An Anthropic API key with credits — [console.anthropic.com](https://console.anthropic.com)
+- Your own API key from any provider — bring your own, this proxy does not supply one
+  - Anthropic: [platform.claude.com](https://platform.claude.com)
+  - OpenAI: [platform.openai.com](https://platform.openai.com)
 
 Check Node.js is installed:
 ```bash
@@ -176,23 +172,13 @@ const client = new Anthropic({
 
 ## Available Models
 
-The proxy exposes these Claude models. You can use them by name in any tool:
+The proxy exposes these Claude models. Use them by name in any tool:
 
 | Model | Best for |
 |---|---|
 | `claude-opus-4-6` | Complex reasoning, long documents |
 | `claude-sonnet-4-6` | Balanced — speed and quality (default) |
 | `claude-haiku-4-5-20251001` | Fast, cheap, simple tasks |
-
-When you send a GPT model name, it's automatically mapped:
-
-| You send | Gets routed to |
-|---|---|
-| `gpt-4o` | `claude-sonnet-4-6` |
-| `gpt-4` | `claude-sonnet-4-6` |
-| `gpt-3.5-turbo` | `claude-haiku-4-5-20251001` |
-| `gpt-4-32k` | `claude-opus-4-6` |
-| `o1` | `claude-opus-4-6` |
 
 ---
 
@@ -220,14 +206,13 @@ Users send this as their API key. Your real Anthropic key is never exposed.
 
 ## Optional: Enable OpenAI Models
 
-If you also have an OpenAI API key:
+If you have an OpenAI API key, add it to `.env`:
 
 ```
-# .env
 OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxx
 ```
 
-Now `gpt-*` model requests route directly to OpenAI. Claude model requests still go to Anthropic.
+Now requests using `gpt-*` model names route directly to OpenAI using your OpenAI key. Claude model requests still go to Anthropic using your Anthropic key. Each provider uses its own key — you are always in control.
 
 ---
 
@@ -275,7 +260,7 @@ Invoke-RestMethod -Uri "http://localhost:3030/v1/messages" -Method POST -Headers
 → Make sure you copied `.env.example` to `.env` and added your key.
 
 **`Your credit balance is too low`**
-→ Add credits at [console.anthropic.com/settings/billing](https://console.anthropic.com/settings/billing).
+→ Add credits at [platform.claude.com](https://platform.claude.com) under Billing.
 
 **`401 Unauthorized`**
 → You set `PROXY_API_KEY`. Make sure your tool is sending it as the API key.

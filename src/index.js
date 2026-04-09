@@ -90,13 +90,20 @@ app.get('/v1/models', (req, res) => {
 
 // OpenAI-compatible chat completions — translates to Anthropic internally
 app.post('/v1/chat/completions', async (req, res) => {
-  const start  = Date.now();
-  const body   = req.body;
-  const isGpt  = typeof body.model === 'string' && body.model.startsWith('gpt-');
+  const start = Date.now();
+  const body  = req.body;
+  const isGpt = typeof body.model === 'string' && body.model.startsWith('gpt-');
 
-  // Route GPT models to OpenAI if key is present
+  // Route gpt-* models to OpenAI directly if key is provided
   if (isGpt && OPENAI_API_KEY) {
     return proxyToOpenAI(req, res);
+  }
+
+  // gpt-* with no OpenAI key — tell the user clearly
+  if (isGpt && !OPENAI_API_KEY) {
+    return res.status(400).json({
+      error: `Model "${body.model}" is an OpenAI model. Add OPENAI_API_KEY to your .env to use it, or use a Claude model name (e.g. claude-sonnet-4-6).`,
+    });
   }
 
   // Translate OpenAI request → Anthropic
