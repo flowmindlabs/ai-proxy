@@ -3,7 +3,7 @@
 A free, open-source local proxy that routes your AI tool requests to any AI provider.
 Run it once on your machine — every tool you use connects through it.
 
-> **⚠️ Bring Your Own API Key (BYOK)**
+> **Bring Your Own API Key (BYOK)**
 > This proxy does not provide any AI credits or API access.
 > Its only job is to route requests from your tools to your chosen AI provider.
 > You bring your own API key — the proxy never touches your credits or bills you anything.
@@ -19,11 +19,15 @@ Your Tool (Claude Code / Cursor / VS Code / any app)
         ▼
   http://localhost:3030
         │
-        └──► your AI provider (Anthropic / OpenAI / any compatible API)
+        ├──► Anthropic  (claude-* models)
+        ├──► OpenAI     (gpt-* models)
+        ├──► Google     (gemini-* models)
+        └──► Ollama     (free local models — no API key needed)
 ```
 
-That's it. The proxy sits in the middle, forwards your requests, and returns the responses.
-Your API key lives only in your `.env` file — never shared, never uploaded, never logged.
+The proxy sits in the middle, routes your requests to the right provider, and returns
+the responses. Your API keys live only in your `.env` file — never shared, never
+uploaded, never logged.
 
 ---
 
@@ -31,20 +35,20 @@ Your API key lives only in your `.env` file — never shared, never uploaded, ne
 
 - **Free forever** — runs on your machine, zero ongoing cost
 - **No token markup** — your key talks directly to the provider at their published list price
-- **Works with any vendor** — Anthropic, OpenAI, or any OpenAI-compatible API
+- **Works with any vendor** — Anthropic, OpenAI, Gemini, Ollama, or any OpenAI-compatible API
 - **Your key stays local** — never sent to any third party, lives only in your `.env` file
 - **5-minute setup** — clone, add your key, done
 - **Works with every major AI tool** — Cursor, VS Code, Open WebUI, LangChain, Claude Code
-- **No data stored** — the proxy forwards requests and returns responses, nothing is saved
+- **Automatic fallback** — if one provider fails, it retries the next one automatically
+- **Usage dashboard** — live web UI showing requests, tokens, and latency at `/dashboard`
+- **Free local models** — add Ollama to run models with no API key at all
 
 ---
 
 ## Requirements
 
 - [Node.js 18+](https://nodejs.org) — download and install if you don't have it
-- Your own API key from any provider — bring your own, this proxy does not supply one
-  - Anthropic: [platform.claude.com](https://platform.claude.com)
-  - OpenAI: [platform.openai.com](https://platform.openai.com)
+- At least one API key **or** Ollama running locally
 
 Check Node.js is installed:
 ```bash
@@ -73,9 +77,21 @@ cp .env.example .env
 
 **4. Add your API key**
 
-Open `.env` and replace the placeholder with your real key:
+Open `.env` and add at least one provider. You only need one — add whichever you have:
+
 ```
+# Anthropic (Claude models) — platform.claude.com
 ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxx
+
+# OpenAI (GPT models) — platform.openai.com
+# OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxx
+
+# Google Gemini — aistudio.google.com
+# GEMINI_API_KEY=AIzaxxxxxxxxxxxxxxxx
+
+# Ollama (free local models — no key needed) — ollama.com
+# OLLAMA_BASE_URL=http://localhost:11434
+# OLLAMA_MODELS=llama3,mistral,codellama
 ```
 
 **5. Start the proxy**
@@ -85,12 +101,21 @@ npm start
 
 You should see:
 ```
-  AI Proxy running on http://localhost:3030
-  Anthropic API:    enabled
-  OpenAI API:       disabled
-  Auth:             disabled
-  Rate limit:       60 req/min per IP
-  Health check:     http://localhost:3030/health
+  AI Proxy v3.0 — http://localhost:3030
+  ─────────────────────────────────────
+  Anthropic:  enabled (claude-* models)
+  OpenAI:     disabled
+  Gemini:     disabled
+  Ollama:     disabled
+  Fallback:   disabled
+  ─────────────────────────────────────
+  Auth:       disabled
+  Rate limit: 60 req/min
+  CORS:       *
+  Timeout:    120s
+  ─────────────────────────────────────
+  Dashboard:  http://localhost:3030/dashboard
+  Health:     http://localhost:3030/health
 ```
 
 ---
@@ -130,7 +155,7 @@ If you set `PROXY_API_KEY`, use that as `apiKey`.
 2. Under OpenAI API:
    - URL: `http://localhost:3030/v1`
    - API Key: leave blank (or your `PROXY_API_KEY` if set)
-3. Click **Verify Connection** — it will show the Claude model list
+3. Click **Verify Connection** — it will show the available model list
 
 ### LangChain (JavaScript)
 
@@ -171,22 +196,72 @@ const client = new Anthropic({
 
 ## Available Models
 
-The proxy exposes these Claude models. Use them by name in any tool:
+Model routing is automatic — the proxy picks the right provider based on the model name.
 
-| Model | Best for |
-|---|---|
-| `claude-opus-4-6` | Complex reasoning, long documents |
-| `claude-sonnet-4-6` | Balanced — speed and quality (default) |
-| `claude-haiku-4-5-20251001` | Fast, cheap, simple tasks |
+| Model | Provider | Notes |
+|---|---|---|
+| `claude-opus-4-6` | Anthropic | Complex reasoning, long documents |
+| `claude-sonnet-4-6` | Anthropic | Balanced — speed and quality (default) |
+| `claude-haiku-4-5-20251001` | Anthropic | Fast, cheap, simple tasks |
+| `gpt-4o`, `gpt-4o-mini`, etc. | OpenAI | Requires `OPENAI_API_KEY` |
+| `gemini-2.5-pro`, `gemini-2.0-flash`, etc. | Google | Requires `GEMINI_API_KEY` |
+| Any model name in `OLLAMA_MODELS` | Ollama | Requires `OLLAMA_BASE_URL` |
 
 ---
 
-## Security
+## Usage Dashboard
 
-- **Your API key never leaves your machine.** It lives in `.env` and is only ever sent to `api.anthropic.com` or `api.openai.com`.
-- **`.gitignore` protects you.** The `.env` file is blocked from being committed to Git by default.
-- **No data stored.** The proxy forwards requests and returns responses — nothing is saved, no database, no logs sent anywhere.
-- **Optional password protection.** Set `PROXY_API_KEY` in `.env` to require a password for anyone connecting to your proxy — useful if you run it on a server.
+Open `http://localhost:3030/dashboard` in your browser while the proxy is running.
+
+The dashboard shows:
+- Requests today, total tokens in/out, fallback count
+- Token usage per model (bar chart)
+- Request count per provider
+- Recent request log with latency and status
+
+Data resets when the proxy restarts — it's in-memory only, no database.
+
+---
+
+## Optional: Free Local Models with Ollama
+
+[Ollama](https://ollama.com) runs AI models on your own machine — completely free, no API key needed.
+
+**1. Install Ollama** from [ollama.com](https://ollama.com)
+
+**2. Pull a model:**
+```bash
+ollama pull llama3
+```
+
+**3. Add to `.env`:**
+```
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODELS=llama3
+```
+
+Now requests for `llama3` route to your local Ollama. No internet required for inference.
+
+Popular models: `llama3`, `mistral`, `codellama`, `phi3`, `qwen2`, `deepseek-r1`, `gemma3`
+
+---
+
+## Optional: Automatic Fallback
+
+If one provider fails (rate limit, outage, quota exceeded), the proxy can automatically
+retry with the next available provider.
+
+Add to `.env`:
+```
+FALLBACK_ORDER=anthropic,openai,gemini,ollama
+```
+
+Only enabled providers are used. If Anthropic returns a 429 (rate limit), the proxy
+retries OpenAI automatically. The `X-Proxy-Fallback: true` header tells you when a
+fallback was used.
+
+Errors that trigger fallback: `429`, `500`, `502`, `503`, `529`
+Errors that do not: `400`, `401`, `403` (your request or key is the problem)
 
 ---
 
@@ -199,19 +274,8 @@ If you run this on a server or want to share access with others:
 PROXY_API_KEY=choose-a-strong-password
 ```
 
-Users send this as their API key. Your real Anthropic key is never exposed.
-
----
-
-## Optional: Enable OpenAI Models
-
-If you have an OpenAI API key, add it to `.env`:
-
-```
-OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxx
-```
-
-Now requests using `gpt-*` model names route directly to OpenAI using your OpenAI key. Claude model requests still go to Anthropic using your Anthropic key. Each provider uses its own key — you are always in control.
+Users send this as their API key. Your real provider keys are never exposed.
+The `/health` and `/dashboard` endpoints remain public.
 
 ---
 
@@ -243,20 +307,22 @@ curl http://localhost:3030/v1/models
 **Send a real message:**
 ```bash
 # Git Bash
-curl -s -X POST http://localhost:3030/v1/messages \
+curl -s -X POST http://localhost:3030/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"claude-haiku-4-5-20251001","max_tokens":20,"messages":[{"role":"user","content":"Hi"}]}'
 
 # PowerShell
-Invoke-RestMethod -Uri "http://localhost:3030/v1/messages" -Method POST -Headers @{"Content-Type"="application/json"} -Body '{"model":"claude-haiku-4-5-20251001","max_tokens":20,"messages":[{"role":"user","content":"Hi"}]}'
+Invoke-RestMethod -Uri "http://localhost:3030/v1/chat/completions" -Method POST `
+  -Headers @{"Content-Type"="application/json"} `
+  -Body '{"model":"claude-haiku-4-5-20251001","max_tokens":20,"messages":[{"role":"user","content":"Hi"}]}'
 ```
 
 ---
 
 ## Troubleshooting
 
-**`ANTHROPIC_API_KEY is not set`**
-→ Make sure you copied `.env.example` to `.env` and added your key.
+**`No provider configured`**
+→ Open `.env` and add at least one API key or `OLLAMA_BASE_URL`.
 
 **`Your credit balance is too low`**
 → Add credits at [platform.claude.com](https://platform.claude.com) under Billing.
@@ -265,13 +331,27 @@ Invoke-RestMethod -Uri "http://localhost:3030/v1/messages" -Method POST -Headers
 → You set `PROXY_API_KEY`. Make sure your tool is sending it as the API key.
 
 **`502 Bad Gateway`**
-→ The proxy can't reach Anthropic. Check your internet connection.
+→ The proxy can't reach the upstream provider. Check your internet connection.
 
 **Port already in use**
 → Change the port in `.env`: `PORT=3031`
 
 **Cursor says "connection failed"**
 → Make sure the proxy is running (`npm start`), and the URL is `http://localhost:3030/v1` (with `/v1`).
+
+**Ollama not working**
+→ Make sure Ollama is running (`ollama serve`) and the model is pulled (`ollama pull llama3`).
+
+---
+
+## Security
+
+- **Your API keys never leave your machine.** They live in `.env` and are only ever sent directly to the provider's API.
+- **`.gitignore` protects you.** The `.env` file is blocked from being committed to Git by default.
+- **No data stored.** The proxy forwards requests and returns responses — nothing is saved, no database, no logs sent anywhere.
+- **SSRF protection.** The Ollama URL is validated to block requests to internal network addresses and cloud metadata endpoints.
+- **XSS protection.** The dashboard escapes all model and provider names before rendering.
+- **Timing-safe auth.** The `PROXY_API_KEY` check uses constant-time comparison to prevent timing attacks.
 
 ---
 
