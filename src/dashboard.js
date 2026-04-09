@@ -6,7 +6,7 @@ export function registerDashboardRoutes(app) {
   });
 
   app.get('/dashboard', (req, res) => {
-    res.setHeader('Content-Type', 'text/html');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(dashboardHTML());
   });
 }
@@ -231,6 +231,14 @@ function dashboardHTML() {
       if (!iso) return '—';
       return new Date(iso).toLocaleTimeString();
     }
+    function esc(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;');
+    }
 
     async function refresh() {
       let data;
@@ -261,7 +269,7 @@ function dashboardHTML() {
           const pct = Math.round((tot / maxTokens) * 100);
           return \`<div class="model-row">
             <div class="model-row-header">
-              <span class="model-name">\${model}</span>
+              <span class="model-name">\${esc(model)}</span>
               <span class="model-tokens">\${fmt(t.in)} in / \${fmt(t.out)} out</span>
             </div>
             <div class="bar-track"><div class="bar-fill" style="width:\${pct}%"></div></div>
@@ -276,7 +284,7 @@ function dashboardHTML() {
         provDiv.innerHTML = '<div class="empty">No requests yet</div>';
       } else {
         provDiv.innerHTML = provKeys.map(p =>
-          \`<div class="provider-chip">\${p}<span>\${fmt(data.requestsByProvider[p])}</span></div>\`
+          \`<div class="provider-chip">\${esc(p)}<span>\${fmt(data.requestsByProvider[p])}</span></div>\`
         ).join('');
       }
 
@@ -295,8 +303,8 @@ function dashboardHTML() {
             : \`<span class="badge ok">\${r.status || 200}</span>\`;
           return \`<tr class="\${cls}">
             <td>\${fmtTime(r.timestamp)}</td>
-            <td>\${r.model || '—'}</td>
-            <td>\${r.provider || '—'}</td>
+            <td>\${esc(r.model || '—')}</td>
+            <td>\${esc(r.provider || '—')}</td>
             <td>\${fmt(r.tokensIn)}</td>
             <td>\${fmt(r.tokensOut)}</td>
             <td>\${fmtLatency(r.latencyMs)}</td>

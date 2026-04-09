@@ -14,9 +14,43 @@ const OLLAMA_MODELS     = (process.env.OLLAMA_MODELS || '')
   .split(',').map(s => s.trim()).filter(Boolean);
 const FALLBACK_ORDER    = (process.env.FALLBACK_ORDER || '')
   .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-const REQUEST_TIMEOUT   = parseInt(process.env.REQUEST_TIMEOUT_MS || '120000', 10);
 
-const RETRYABLE_CODES   = new Set([429, 500, 502, 503, 529]);
+// Clamp timeout: min 5s, max 5 minutes
+const REQUEST_TIMEOUT = Math.max(5000, Math.min(300000,
+  parseInt(process.env.REQUEST_TIMEOUT_MS || '120000', 10)
+));
+
+const RETRYABLE_CODES = new Set([429, 500, 502, 503, 529]);
+
+// ── SSRF protection — validate OLLAMA_BASE_URL ────────────────────────────────
+// Prevents targeting internal services, cloud metadata endpoints, or file:// URLs
+
+const BLOCKED_HOSTNAMES = new Set([
+  '169.254.169.254',  // AWS/GCP/Azure metadata
+  'metadata.google.internal',
+]);
+
+function validateOllamaUrl(urlStr) {
+  if (!urlStr) return null;
+  let parsed;
+  try {
+    parsed = new URL(urlStr);
+  } catch {
+    console.error('[ERROR] OLLAMA_BASE_URL is not a valid URL:', urlStr);
+    return null;
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    console.error('[ERROR] OLLAMA_BASE_URL must use http:// or https://, got:', parsed.protocol);
+    return null;
+  }
+  if (BLOCKED_HOSTNAMES.has(parsed.hostname)) {
+    console.error('[ERROR] OLLAMA_BASE_URL hostname is blocked:', parsed.hostname);
+    return null;
+  }
+  return urlStr.replace(/\/$/, ''); // strip trailing slash
+}
+
+const SAFE_OLLAMA_URL = validateOllamaUrl(OLLAMA_BASE_URL);
 
 // ── Fetch with timeout ────────────────────────────────────────────────────────
 
@@ -30,7 +64,7 @@ function makeFetchWithTimeout(url, options) {
 // ── Model → Provider resolution ───────────────────────────────────────────────
 
 function isOllamaModel(model) {
-  if (!OLLAMA_BASE_URL) return false;
+  if (!SAFE_OLLAMA_URL) return false;
   if (OLLAMA_MODELS.length > 0) return OLLAMA_MODELS.includes(model);
   // catch-all: anything not matching known prefixes
   return !model.startsWith('claude-') && !model.startsWith('gpt-') && !model.startsWith('gemini-');
@@ -49,7 +83,7 @@ export function isProviderEnabled(name) {
     case 'anthropic': return Boolean(ANTHROPIC_API_KEY);
     case 'openai':    return Boolean(OPENAI_API_KEY);
     case 'gemini':    return Boolean(GEMINI_API_KEY);
-    case 'ollama':    return Boolean(OLLAMA_BASE_URL);
+    case 'ollama':    return Boolean(SAFE_OLLAMA_URL);
     default:          return false;
   }
 }
@@ -146,6 +180,10 @@ async function callOpenAI(body, req, res, onComplete) {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    upstream.body.on('error', (err) => {
+      console.error('[ERROR] OpenAI stream error:', err.message);
+      if (!res.writableEnded) res.end();
+    });
     upstream.body.pipe(res);
     return { status: 200, streaming: true };
   }
@@ -165,13 +203,16 @@ async function callGemini(body, req, res, onComplete) {
     return { status: 400, error: `Invalid request: ${err.message}` };
   }
 
-  const url = buildGeminiUrl(model, Boolean(body.stream), GEMINI_API_KEY);
+  const url = buildGeminiUrl(model, Boolean(body.stream));
 
   let upstream;
   try {
     upstream = await makeFetchWithTimeout(url, {
       method:  'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type':  'application/json',
+        'authorization': `Bearer ${GEMINI_API_KEY}`,
+      },
       body:    JSON.stringify(geminiBody),
     });
   } catch (err) {
@@ -210,7 +251,7 @@ async function callGemini(body, req, res, onComplete) {
 }
 
 async function callOllama(body, req, res, onComplete) {
-  const url = `${OLLAMA_BASE_URL}/v1/chat/completions`;
+  const url = `${SAFE_OLLAMA_URL}/v1/chat/completions`;
   let upstream;
   try {
     upstream = await makeFetchWithTimeout(url, {
@@ -234,6 +275,10 @@ async function callOllama(body, req, res, onComplete) {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    upstream.body.on('error', (err) => {
+      console.error('[ERROR] Ollama stream error:', err.message);
+      if (!res.writableEnded) res.end();
+    });
     upstream.body.pipe(res);
     return { status: 200, streaming: true };
   }

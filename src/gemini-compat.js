@@ -12,12 +12,14 @@ const GEMINI_FINISH_REASON_MAP = {
 };
 
 // ── URL builder ───────────────────────────────────────────────────────────────
+// API key goes in the Authorization header, NOT the URL, to prevent key leakage
+// in server logs, browser history, and CDN/proxy access logs.
 
-export function buildGeminiUrl(model, stream, apiKey) {
+export function buildGeminiUrl(model, stream) {
   if (stream) {
-    return `${GEMINI_BASE}/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+    return `${GEMINI_BASE}/${model}:streamGenerateContent?alt=sse`;
   }
-  return `${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`;
+  return `${GEMINI_BASE}/${model}:generateContent`;
 }
 
 // ── Request translation: OpenAI → Gemini ─────────────────────────────────────
@@ -157,7 +159,7 @@ export async function streamGeminiToOpenAI(upstream, res, model, onComplete) {
       }
 
       const lines = buffer.split('\n');
-      buffer = lines.pop();
+      buffer = lines.pop(); // keep incomplete last line
 
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
@@ -173,28 +175,52 @@ export async function streamGeminiToOpenAI(upstream, res, model, onComplete) {
         }
 
         const candidate = event.candidates?.[0];
-        if (!candidate) continue;
+        // candidate can be absent on intermediate chunks — skip safely
+        if (candidate) {
+          // Extract text from all parts
+          const text = candidate.content?.parts?.map(p => p.text || '').join('') ?? '';
+          if (text) sendChunk({ content: text });
 
-        // Extract text from all parts
-        const text = candidate.content?.parts?.map(p => p.text || '').join('') ?? '';
-        if (text) sendChunk({ content: text });
-
-        // Track finish reason and tokens from final event
-        if (candidate.finishReason) {
-          finishReason = GEMINI_FINISH_REASON_MAP[candidate.finishReason] ?? 'stop';
+          // Track finish reason from final event
+          if (candidate.finishReason) {
+            finishReason = GEMINI_FINISH_REASON_MAP[candidate.finishReason] ?? 'stop';
+          }
         }
 
+        // Usage metadata may appear even without candidates
         if (event.usageMetadata) {
           inputTokens  = event.usageMetadata.promptTokenCount     ?? 0;
           outputTokens = event.usageMetadata.candidatesTokenCount ?? 0;
         }
       }
     }
+
+    // Process any remaining buffered data after stream ends
+    if (buffer.trim().startsWith('data: ')) {
+      const raw = buffer.slice(6).trim();
+      if (raw && raw !== '[DONE]') {
+        try {
+          const event     = JSON.parse(raw);
+          const candidate = event.candidates?.[0];
+          if (candidate) {
+            const text = candidate.content?.parts?.map(p => p.text || '').join('') ?? '';
+            if (text) sendChunk({ content: text });
+            if (candidate.finishReason) {
+              finishReason = GEMINI_FINISH_REASON_MAP[candidate.finishReason] ?? 'stop';
+            }
+          }
+          if (event.usageMetadata) {
+            inputTokens  = event.usageMetadata.promptTokenCount     ?? 0;
+            outputTokens = event.usageMetadata.candidatesTokenCount ?? 0;
+          }
+        } catch { /* ignore malformed final chunk */ }
+      }
+    }
   } catch (err) {
     throw err;
   }
 
-  // Send final finish chunk and DONE
+  // Always send final finish chunk and [DONE] — required by OpenAI SSE spec
   sendChunk({}, finishReason);
   res.write('data: [DONE]\n\n');
 
