@@ -1,7 +1,7 @@
 {
   "name": "ai-proxy",
-  "version": "2.0.0",
-  "description": "A lightweight local AI proxy. Route Anthropic and OpenAI requests through one place. Free, open source, your API key stays on your machine.",
+  "version": "4.0.0",
+  "description": "A free, open-source AI proxy with hybrid routing, cost tracking, caching, and 5 provider support. Bring your own API key.",
   "main": "src/index.js",
   "type": "module",
   "scripts": {

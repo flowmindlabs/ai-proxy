@@ -1,63 +1,64 @@
 # AI Proxy
 
-A free, open-source local proxy that routes your AI tool requests to any AI provider.
-Run it once on your machine — every tool you use connects through it.
+A free, open-source local proxy that routes your AI tool requests to any provider — with smart routing, cost tracking, caching, and automatic fallback built in.
 
 > **Bring Your Own API Key (BYOK)**
-> This proxy does not provide any AI credits or API access.
-> Its only job is to route requests from your tools to your chosen AI provider.
-> You bring your own API key — the proxy never touches your credits or bills you anything.
+> This proxy never provides AI credits or charges you anything.
+> Its only job is to route requests from your tools to your chosen provider.
+> Your keys stay in your `.env` file — never shared, never uploaded.
 
 ---
 
 ## What It Does
 
 ```
-Your Tool (Claude Code / Cursor / VS Code / any app)
+Your Tool (Claude Code / Cursor / VS Code / LangChain / any app)
         │
         │  sends request to YOUR proxy
         ▼
   http://localhost:3030
         │
-        ├──► Anthropic  (claude-* models)
-        ├──► OpenAI     (gpt-* models)
-        ├──► Google     (gemini-* models)
-        └──► Ollama     (free local models — no API key needed)
+        ├──► Anthropic   (claude-* models)
+        ├──► OpenAI      (gpt-*, o1, o3 models)
+        ├──► Google      (gemini-* models)
+        ├──► Ollama      (free local models — no API key needed)
+        └──► OpenRouter  (200+ models via one key)
 ```
 
-The proxy sits in the middle, routes your requests to the right provider, and returns
-the responses. Your API keys live only in your `.env` file — never shared, never
-uploaded, never logged.
+The proxy sits in the middle, picks the most cost-effective model, caches repeated requests, and returns responses — all transparently to your tools.
 
 ---
 
 ## Why Use This?
 
-- **Free forever** — runs on your machine, zero ongoing cost
-- **No token markup** — your key talks directly to the provider at their published list price
-- **Works with any vendor** — Anthropic, OpenAI, Gemini, Ollama, or any OpenAI-compatible API
-- **Your key stays local** — never sent to any third party, lives only in your `.env` file
-- **5-minute setup** — clone, add your key, done
-- **Works with every major AI tool** — Cursor, VS Code, Open WebUI, LangChain, Claude Code
-- **Automatic fallback** — if one provider fails, it retries the next one automatically
-- **Usage dashboard** — live web UI showing requests, tokens, and latency at `/dashboard`
-- **Free local models** — add Ollama to run models with no API key at all
+| Feature | What it means |
+|---|---|
+| **Free forever** | Runs on your machine, zero ongoing cost |
+| **5 providers** | Anthropic, OpenAI, Gemini, Ollama, OpenRouter — all in one place |
+| **Smart Router** | Routes prompts to the right model tier automatically — cheap for simple, powerful for complex |
+| **Exact + Semantic Cache** | Identical or similar prompts return instantly at $0 |
+| **Cost Tracking** | See exactly how much each request costs in USD |
+| **Daily Budget Caps** | Hard spending limits per provider — auto-reject when exceeded |
+| **Model Aliases** | Send `gpt-4o`, silently use `ollama/llama4` — no client changes needed |
+| **Output Validation** | If a cheap model returns invalid JSON, auto-escalate to a powerful model |
+| **Automatic Fallback** | If one provider fails, retry the next one automatically |
+| **Live Dashboard** | Web UI with cost, tokens, cache stats, request log at `/dashboard` |
+| **No token markup** | Your key talks directly to the provider at their published price |
 
 ---
 
 ## Requirements
 
-- [Node.js 18+](https://nodejs.org) — download and install if you don't have it
+- [Node.js 18+](https://nodejs.org)
 - At least one API key **or** Ollama running locally
 
-Check Node.js is installed:
 ```bash
-node --version
+node --version   # must be 18 or higher
 ```
 
 ---
 
-## Setup (5 minutes)
+## Setup
 
 **1. Clone the repo**
 ```bash
@@ -75,54 +76,49 @@ npm install
 cp .env.example .env
 ```
 
-**4. Add your API key**
+**4. Add at least one provider key**
 
-Open `.env` and add at least one provider. You only need one — add whichever you have:
+Open `.env` and uncomment whichever provider you have:
 
-```
-# Anthropic (Claude models) — platform.claude.com
-ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxx
+```env
+# Pick one or more:
 
-# OpenAI (GPT models) — platform.openai.com
-# OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxx
-
-# Google Gemini — aistudio.google.com
-# GEMINI_API_KEY=AIzaxxxxxxxxxxxxxxxx
-
-# Ollama (free local models — no key needed) — ollama.com
-# OLLAMA_BASE_URL=http://localhost:11434
+ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxx      # platform.claude.com
+# OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxx           # platform.openai.com
+# GEMINI_API_KEY=AIzaxxxxxxxxxxxxxxxx          # aistudio.google.com
+# OPENROUTER_API_KEY=sk-or-xxxxxxxxxxxxxxxx    # openrouter.ai (200+ models, free key)
+# OLLAMA_BASE_URL=http://localhost:11434        # ollama.com (free, runs locally)
 # OLLAMA_MODELS=llama3,mistral,codellama
 ```
+
+> **Tip:** [OpenRouter](https://openrouter.ai) gives you a free API key with access to Llama 4, DeepSeek-R1, Mistral, GPT, and Claude — all in one key. Great starting point.
 
 **5. Start the proxy**
 ```bash
 npm start
 ```
 
-You should see:
+Expected output:
 ```
-  AI Proxy v3.0 — http://localhost:3030
+  AI Proxy v4.0 — http://localhost:3030
   ─────────────────────────────────────
-  Anthropic:  enabled (claude-* models)
-  OpenAI:     disabled
-  Gemini:     disabled
-  Ollama:     disabled
-  Fallback:   disabled
+  Anthropic:    enabled (claude-* models)
+  OpenAI:       disabled
+  Gemini:       disabled
+  Ollama:       disabled
+  OpenRouter:   disabled
+  Smart Router: disabled
+  Cache:        enabled (max 500 entries)
   ─────────────────────────────────────
-  Auth:       disabled
-  Rate limit: 60 req/min
-  CORS:       *
-  Timeout:    120s
-  ─────────────────────────────────────
-  Dashboard:  http://localhost:3030/dashboard
-  Health:     http://localhost:3030/health
+  Dashboard:    http://localhost:3030/dashboard
+  Health:       http://localhost:3030/health
 ```
 
 ---
 
 ## Connecting Your Tools
 
-### Claude Code (CLI)
+### Claude Code
 
 ```bash
 claude config set apiUrl http://localhost:3030
@@ -130,15 +126,14 @@ claude config set apiUrl http://localhost:3030
 
 ### Cursor
 
-1. Open **Settings** (Ctrl+Shift+J)
-2. Search for **OpenAI Base URL**
-3. Set it to: `http://localhost:3030/v1`
-4. Set API Key to any value (e.g. `proxy`)
+1. Open **Settings** → search **OpenAI Base URL**
+2. Set to: `http://localhost:3030/v1`
+3. Set API Key to any value (e.g. `proxy`)
 
 ### VS Code — Continue.dev
 
-Add to `~/.continue/config.yaml`:
 ```yaml
+# ~/.continue/config.yaml
 models:
   - name: Claude via Proxy
     provider: openai
@@ -147,15 +142,12 @@ models:
     apiKey: any-value
 ```
 
-If you set `PROXY_API_KEY`, use that as `apiKey`.
-
 ### Open WebUI
 
-1. Go to **Admin Panel → Settings → Connections**
-2. Under OpenAI API:
-   - URL: `http://localhost:3030/v1`
-   - API Key: leave blank (or your `PROXY_API_KEY` if set)
-3. Click **Verify Connection** — it will show the available model list
+1. **Admin Panel → Settings → Connections → OpenAI API**
+2. URL: `http://localhost:3030/v1`
+3. API Key: leave blank (or your `PROXY_API_KEY` if set)
+4. Click **Verify Connection**
 
 ### LangChain (JavaScript)
 
@@ -181,7 +173,7 @@ llm = ChatOpenAI(
 )
 ```
 
-### Any Anthropic SDK app
+### Anthropic SDK (direct)
 
 ```js
 import Anthropic from '@anthropic-ai/sdk';
@@ -196,36 +188,122 @@ const client = new Anthropic({
 
 ## Available Models
 
-Model routing is automatic — the proxy picks the right provider based on the model name.
+Model routing is automatic — the proxy picks the right provider from the model name prefix.
 
-| Model | Provider | Notes |
+| Prefix / Pattern | Provider | Example models |
 |---|---|---|
-| `claude-opus-4-6` | Anthropic | Complex reasoning, long documents |
-| `claude-sonnet-4-6` | Anthropic | Balanced — speed and quality (default) |
-| `claude-haiku-4-5-20251001` | Anthropic | Fast, cheap, simple tasks |
-| `gpt-4o`, `gpt-4o-mini`, etc. | OpenAI | Requires `OPENAI_API_KEY` |
-| `gemini-2.5-pro`, `gemini-2.0-flash`, etc. | Google | Requires `GEMINI_API_KEY` |
-| Any model name in `OLLAMA_MODELS` | Ollama | Requires `OLLAMA_BASE_URL` |
+| `claude-*` | Anthropic | `claude-opus-4-6`, `claude-sonnet-4-6`, `claude-haiku-4-5-20251001` |
+| `gpt-*`, `o1`, `o3` | OpenAI | `gpt-4o`, `gpt-4o-mini`, `o3-mini` |
+| `gemini-*` | Google | `gemini-2.5-pro`, `gemini-2.0-flash` |
+| `openrouter/*` | OpenRouter | `openrouter/meta-llama/llama-3-8b-instruct` |
+| anything in `OLLAMA_MODELS` | Ollama | `llama3`, `mistral`, `deepseek-r1` |
+| unknown model + `OPENROUTER_API_KEY` set | OpenRouter | catch-all for 200+ models |
 
 ---
 
-## Usage Dashboard
+## Smart Routing (3-Tier System)
 
-Open `http://localhost:3030/dashboard` in your browser while the proxy is running.
+Enable automatic model selection based on prompt complexity:
 
-The dashboard shows:
-- Requests today, total tokens in/out, fallback count
-- Token usage per model (bar chart)
-- Request count per provider
-- Recent request log with latency and status
+```env
+SMART_ROUTING=true
+ROUTING_TIER1_MODEL=claude-haiku-4-5-20251001   # fast/cheap — summarize, translate, classify
+ROUTING_TIER2_MODEL=claude-sonnet-4-6            # balanced  — coding, writing (default)
+ROUTING_TIER3_MODEL=claude-opus-4-6              # powerful  — analysis, research, complex tasks
+```
 
-Data resets when the proxy restarts — it's in-memory only, no database.
+**How it decides:**
+- **Tier 1** — short prompt (< 500 tokens) + keywords: `summarize`, `translate`, `list`, `classify`, `yes or no`
+- **Tier 3** — long prompt (> 4000 tokens) OR keywords: `analyze`, `compare`, `evaluate`, `reason step by step`, `expert`
+- **Tier 2** — everything else
+
+The client's requested model is silently overridden. No code changes needed on the client side.
 
 ---
 
-## Optional: Free Local Models with Ollama
+## Model Aliases
 
-[Ollama](https://ollama.com) runs AI models on your own machine — completely free, no API key needed.
+Silently rewrite any model name before routing. Clients keep their existing code; you control what actually runs:
+
+```env
+ALIAS_gpt-4o=ollama/llama4
+ALIAS_gpt-4=openrouter/meta-llama/llama-3-70b-instruct
+```
+
+Now when a client sends `model: "gpt-4o"`, the proxy uses `ollama/llama4` — no client changes needed.
+
+---
+
+## Cost Tracking & Budget Caps
+
+Every request logs its estimated USD cost. View in the dashboard or via `/dashboard/stats`.
+
+**Set daily spend limits per provider** (auto-reject with HTTP 429 when exceeded):
+
+```env
+ANTHROPIC_DAILY_BUDGET_USD=5.00
+OPENAI_DAILY_BUDGET_USD=2.00
+GEMINI_DAILY_BUDGET_USD=1.00
+OPENROUTER_DAILY_BUDGET_USD=3.00
+```
+
+Set to `0` (default) to disable. Limits reset at midnight.
+
+---
+
+## Prompt Caching
+
+### Exact Cache (default: on)
+
+Identical requests (same model + same messages) return instantly at $0 — no API call made.
+
+```env
+CACHE_ENABLED=true    # enabled by default
+CACHE_MAX_SIZE=500    # max entries in memory
+```
+
+Response header `X-Cache: HIT` tells you when a cache hit occurs.
+
+### Semantic Cache (optional)
+
+Similar prompts — `"What is ML?"` and `"Explain machine learning"` — can return the same cached answer using local sentence embeddings. Runs entirely in-process, no server needed.
+
+**Setup:**
+```bash
+npm install @xenova/transformers   # ~23MB model downloads on first start
+```
+
+```env
+SEMANTIC_CACHE=true
+SEMANTIC_THRESHOLD=0.92   # similarity threshold (0.0–1.0), higher = stricter
+```
+
+Response header `X-Cache: SEMANTIC-HIT` when a semantic match is found. Gracefully disabled if the package is not installed.
+
+---
+
+## OpenRouter — 200+ Models With One Key
+
+[OpenRouter](https://openrouter.ai) provides access to GPT-5, Claude, Llama 4, DeepSeek-R1, Mistral, Gemma, and 200+ more models via a single API key. Free to sign up.
+
+```env
+OPENROUTER_API_KEY=sk-or-xxxxxxxxxxxxxxxx
+```
+
+**Usage:**
+```json
+{ "model": "openrouter/meta-llama/llama-3-8b-instruct" }
+{ "model": "openrouter/deepseek/deepseek-r1" }
+{ "model": "openrouter/mistralai/mistral-7b-instruct" }
+```
+
+Full model list: [openrouter.ai/models](https://openrouter.ai/models)
+
+---
+
+## Free Local Models with Ollama
+
+[Ollama](https://ollama.com) runs models on your machine — no API key, no internet required for inference.
 
 **1. Install Ollama** from [ollama.com](https://ollama.com)
 
@@ -235,51 +313,67 @@ ollama pull llama3
 ```
 
 **3. Add to `.env`:**
-```
+```env
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODELS=llama3
+OLLAMA_MODELS=llama3,mistral,codellama
 ```
-
-Now requests for `llama3` route to your local Ollama. No internet required for inference.
 
 Popular models: `llama3`, `mistral`, `codellama`, `phi3`, `qwen2`, `deepseek-r1`, `gemma3`
 
 ---
 
-## Optional: Automatic Fallback
+## Automatic Fallback
 
-If one provider fails (rate limit, outage, quota exceeded), the proxy can automatically
-retry with the next available provider.
+If a provider fails (rate limit, outage, quota), the proxy retries the next available provider automatically.
 
-Add to `.env`:
-```
-FALLBACK_ORDER=anthropic,openai,gemini,ollama
+```env
+FALLBACK_ORDER=anthropic,openai,gemini,ollama,openrouter
 ```
 
-Only enabled providers are used. If Anthropic returns a 429 (rate limit), the proxy
-retries OpenAI automatically. The `X-Proxy-Fallback: true` header tells you when a
-fallback was used.
+Only enabled providers are used. The `X-Proxy-Fallback: true` response header tells you when a fallback fired.
 
-Errors that trigger fallback: `429`, `500`, `502`, `503`, `529`
-Errors that do not: `400`, `401`, `403` (your request or key is the problem)
+Triggers: `429`, `500`, `502`, `503`, `529`
+Does not trigger: `400`, `401`, `403` (request or key problem)
 
 ---
 
-## Optional: Protect with a Password
+## Password Protection
 
-If you run this on a server or want to share access with others:
+When running on a server or sharing with others:
 
-```
-# .env
+```env
 PROXY_API_KEY=choose-a-strong-password
 ```
 
-Users send this as their API key. Your real provider keys are never exposed.
-The `/health` and `/dashboard` endpoints remain public.
+Users send this as their API key. Your real provider keys are never exposed. `/health` and `/dashboard` remain public.
 
 ---
 
-## Optional: Run with Docker
+## Dashboard
+
+Open `http://localhost:3030/dashboard` while the proxy is running.
+
+Shows:
+- **Cost Today (USD)** — running spend since midnight
+- **Requests today**, tokens in/out, fallback count
+- **Usage by Model** — tokens + cost per model (bar chart)
+- **Requests by Provider** — breakdown across all 5 providers
+- **Cache Stats** — exact cache size and status
+- **Recent Requests** — live log with cost, latency, status, cache/fallback/escalation badges
+
+Data resets on restart — in-memory only, no database.
+
+---
+
+## Output Validation
+
+When a request requires JSON output (`response_format: { type: "json_object" }` or system prompt contains "respond in JSON"), the proxy automatically validates the response. If a Tier 1 or Tier 2 model returns invalid JSON, it re-routes to the Tier 3 model and returns that result instead.
+
+Response header `X-Proxy-Escalated: true` indicates escalation happened.
+
+---
+
+## Docker
 
 ```bash
 docker build -t ai-proxy .
@@ -290,23 +384,14 @@ docker run -p 3030:3030 --env-file .env ai-proxy
 
 ## Verify It's Working
 
-**Health check (free, no API call):**
 ```bash
-# Git Bash / Mac / Linux
+# Health check (no API call)
 curl http://localhost:3030/health
 
-# PowerShell
-Invoke-RestMethod -Uri "http://localhost:3030/health"
-```
-
-**List models:**
-```bash
+# List models
 curl http://localhost:3030/v1/models
-```
 
-**Send a real message:**
-```bash
-# Git Bash
+# Send a real message (Git Bash / Mac / Linux)
 curl -s -X POST http://localhost:3030/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"claude-haiku-4-5-20251001","max_tokens":20,"messages":[{"role":"user","content":"Hi"}]}'
@@ -321,48 +406,72 @@ Invoke-RestMethod -Uri "http://localhost:3030/v1/chat/completions" -Method POST 
 
 ## Troubleshooting
 
-**`No provider configured`**
-→ Open `.env` and add at least one API key or `OLLAMA_BASE_URL`.
-
-**`Your credit balance is too low`**
-→ Add credits at [platform.claude.com](https://platform.claude.com) under Billing.
-
-**`401 Unauthorized`**
-→ You set `PROXY_API_KEY`. Make sure your tool is sending it as the API key.
-
-**`502 Bad Gateway`**
-→ The proxy can't reach the upstream provider. Check your internet connection.
-
-**Port already in use**
-→ Change the port in `.env`: `PORT=3031`
-
-**Cursor says "connection failed"**
-→ Make sure the proxy is running (`npm start`), and the URL is `http://localhost:3030/v1` (with `/v1`).
-
-**Ollama not working**
-→ Make sure Ollama is running (`ollama serve`) and the model is pulled (`ollama pull llama3`).
+| Error | Fix |
+|---|---|
+| `No provider configured` | Add at least one API key or `OLLAMA_BASE_URL` to `.env` |
+| `Your credit balance is too low` | Add credits at [platform.claude.com](https://platform.claude.com) → Billing |
+| `401 Unauthorized` | You set `PROXY_API_KEY` — send it as the API key in your tool |
+| `Daily budget exceeded` | Spend limit hit — increase `*_DAILY_BUDGET_USD` or wait until midnight |
+| `502 Bad Gateway` | Proxy can't reach the provider — check internet connection |
+| Port already in use | Set `PORT=3031` in `.env` |
+| Cursor "connection failed" | Proxy must be running; URL must be `http://localhost:3030/v1` (with `/v1`) |
+| Ollama not working | Run `ollama serve` and `ollama pull <model>` first |
 
 ---
 
 ## Security
 
-- **Your API keys never leave your machine.** They live in `.env` and are only ever sent directly to the provider's API.
-- **`.gitignore` protects you.** The `.env` file is blocked from being committed to Git by default.
-- **No data stored.** The proxy forwards requests and returns responses — nothing is saved, no database, no logs sent anywhere.
-- **SSRF protection.** The Ollama URL is validated to block requests to internal network addresses and cloud metadata endpoints.
-- **XSS protection.** The dashboard escapes all model and provider names before rendering.
-- **Timing-safe auth.** The `PROXY_API_KEY` check uses constant-time comparison to prevent timing attacks.
+- **Keys never leave your machine** — live in `.env`, sent only to the provider's API
+- **`.gitignore` protection** — `.env` is blocked from Git commits by default
+- **No data stored** — requests forwarded and returned, nothing saved
+- **SSRF protection** — Ollama URL validated to block internal network addresses and cloud metadata endpoints
+- **XSS protection** — dashboard escapes all user-controlled strings before rendering
+- **Timing-safe auth** — `PROXY_API_KEY` uses constant-time comparison to prevent timing attacks
+- **Prototype pollution protection** — model/provider keys sanitized before writing to stats objects
+
+---
+
+## All Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | — | Anthropic API key |
+| `OPENAI_API_KEY` | — | OpenAI API key |
+| `GEMINI_API_KEY` | — | Google Gemini API key |
+| `OLLAMA_BASE_URL` | — | Ollama server URL |
+| `OLLAMA_MODELS` | — | Comma-separated list of Ollama model names |
+| `OPENROUTER_API_KEY` | — | OpenRouter API key |
+| `OPENROUTER_SITE_URL` | `http://localhost:3030` | Sent as HTTP-Referer to OpenRouter |
+| `OPENROUTER_SITE_NAME` | `AI Proxy` | Sent as X-Title to OpenRouter |
+| `FALLBACK_ORDER` | — | Provider retry order, e.g. `anthropic,openai` |
+| `ALIAS_<name>` | — | Model alias, e.g. `ALIAS_gpt-4o=ollama/llama4` |
+| `SMART_ROUTING` | `false` | Enable 3-tier prompt routing |
+| `ROUTING_TIER1_MODEL` | `claude-haiku-4-5-20251001` | Fast model for simple prompts |
+| `ROUTING_TIER2_MODEL` | `claude-sonnet-4-6` | Default balanced model |
+| `ROUTING_TIER3_MODEL` | `claude-opus-4-6` | Powerful model for complex prompts |
+| `ANTHROPIC_DAILY_BUDGET_USD` | `0` | Daily spend cap for Anthropic (0 = off) |
+| `OPENAI_DAILY_BUDGET_USD` | `0` | Daily spend cap for OpenAI |
+| `GEMINI_DAILY_BUDGET_USD` | `0` | Daily spend cap for Gemini |
+| `OPENROUTER_DAILY_BUDGET_USD` | `0` | Daily spend cap for OpenRouter |
+| `CACHE_ENABLED` | `true` | Enable exact prompt cache |
+| `CACHE_MAX_SIZE` | `500` | Max entries in exact cache |
+| `SEMANTIC_CACHE` | `false` | Enable semantic cache (needs `@xenova/transformers`) |
+| `SEMANTIC_THRESHOLD` | `0.92` | Cosine similarity threshold for semantic hit |
+| `SEMANTIC_CACHE_MAX_SIZE` | `200` | Max entries in semantic store |
+| `PROXY_API_KEY` | — | Password protection for the proxy |
+| `CORS_ORIGIN` | `*` | Allowed CORS origin |
+| `PORT` | `3030` | HTTP server port |
+| `REQUEST_TIMEOUT_MS` | `120000` | Request timeout (ms) |
+| `RATE_LIMIT_PER_MIN` | `60` | Rate limit per IP per minute (0 = off) |
 
 ---
 
 ## Stopping the Proxy
 
-Press `Ctrl + C` in the terminal where it's running.
-
-To start again: `npm start`
+Press `Ctrl + C`. To restart: `npm start`
 
 ---
 
 ## License
 
-[MIT](./LICENSE) — free to use, modify, and share. No restrictions.
+[MIT](./LICENSE) — free to use, modify, and share.

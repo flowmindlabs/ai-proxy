@@ -13,8 +13,9 @@ const PORT              = process.env.PORT || 3030;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const OPENAI_API_KEY    = process.env.OPENAI_API_KEY;
 const GEMINI_API_KEY    = process.env.GEMINI_API_KEY;
-const OLLAMA_BASE_URL   = process.env.OLLAMA_BASE_URL;
-const PROXY_API_KEY     = process.env.PROXY_API_KEY;
+const OLLAMA_BASE_URL      = process.env.OLLAMA_BASE_URL;
+const OPENROUTER_API_KEY   = process.env.OPENROUTER_API_KEY;
+const PROXY_API_KEY        = process.env.PROXY_API_KEY;
 const RATE_LIMIT_RPM    = parseInt(process.env.RATE_LIMIT_PER_MIN || '60', 10);
 const CORS_ORIGIN       = process.env.CORS_ORIGIN || '*';
 const REQUEST_TIMEOUT   = parseInt(process.env.REQUEST_TIMEOUT_MS || '120000', 10);
@@ -22,12 +23,13 @@ const FALLBACK_ORDER    = process.env.FALLBACK_ORDER || '';
 
 // ── Startup validation ────────────────────────────────────────────────────────
 
-if (!ANTHROPIC_API_KEY && !OPENAI_API_KEY && !GEMINI_API_KEY && !OLLAMA_BASE_URL) {
+if (!ANTHROPIC_API_KEY && !OPENAI_API_KEY && !GEMINI_API_KEY && !OLLAMA_BASE_URL && !OPENROUTER_API_KEY) {
   console.error('[ERROR] No provider configured. Set at least one API key in your .env file.');
   console.error('  ANTHROPIC_API_KEY — for Claude models (platform.claude.com)');
   console.error('  OPENAI_API_KEY    — for GPT models (platform.openai.com)');
   console.error('  GEMINI_API_KEY    — for Gemini models (aistudio.google.com)');
   console.error('  OLLAMA_BASE_URL   — for free local models (ollama.com)');
+  console.error('  OPENROUTER_API_KEY — for 200+ models via OpenRouter (openrouter.ai)');
   process.exit(1);
 }
 
@@ -200,19 +202,22 @@ const enabled = getEnabledProviders();
 const ollamaModels = getOllamaModels();
 
 app.listen(PORT, () => {
-  console.log(`\n  AI Proxy v3.0 — http://localhost:${PORT}`);
+  console.log(`\n  AI Proxy v4.0 — http://localhost:${PORT}`);
   console.log(`  ─────────────────────────────────────`);
-  console.log(`  Anthropic:  ${ANTHROPIC_API_KEY ? 'enabled (claude-* models)' : 'disabled'}`);
-  console.log(`  OpenAI:     ${OPENAI_API_KEY    ? 'enabled (gpt-* models)'    : 'disabled'}`);
-  console.log(`  Gemini:     ${GEMINI_API_KEY    ? 'enabled (gemini-* models)' : 'disabled'}`);
-  console.log(`  Ollama:     ${OLLAMA_BASE_URL   ? `enabled (${ollamaModels.join(', ') || 'catch-all'})` : 'disabled'}`);
-  console.log(`  Fallback:   ${FALLBACK_ORDER    ? FALLBACK_ORDER              : 'disabled'}`);
+  console.log(`  Anthropic:    ${ANTHROPIC_API_KEY  ? 'enabled (claude-* models)'                                     : 'disabled'}`);
+  console.log(`  OpenAI:       ${OPENAI_API_KEY     ? 'enabled (gpt-*, o1, o3 models)'                                : 'disabled'}`);
+  console.log(`  Gemini:       ${GEMINI_API_KEY     ? 'enabled (gemini-* models)'                                     : 'disabled'}`);
+  console.log(`  Ollama:       ${OLLAMA_BASE_URL    ? `enabled (${ollamaModels.join(', ') || 'catch-all'})`           : 'disabled'}`);
+  console.log(`  OpenRouter:   ${OPENROUTER_API_KEY ? 'enabled (openrouter/* + unknown models)'                       : 'disabled'}`);
+  console.log(`  Fallback:     ${FALLBACK_ORDER     ? FALLBACK_ORDER                                                  : 'disabled'}`);
+  console.log(`  Smart Router: ${process.env.SMART_ROUTING === 'true'                                                 ? `enabled (T1=${process.env.ROUTING_TIER1_MODEL || 'haiku'} T2=${process.env.ROUTING_TIER2_MODEL || 'sonnet'} T3=${process.env.ROUTING_TIER3_MODEL || 'opus'})` : 'disabled'}`);
+  console.log(`  Cache:        ${process.env.CACHE_ENABLED !== 'false'                                                ? `enabled (max ${process.env.CACHE_MAX_SIZE || 500} entries)` : 'disabled'}`);
   console.log(`  ─────────────────────────────────────`);
-  console.log(`  Auth:       ${PROXY_API_KEY     ? 'enabled'                   : 'disabled'}`);
-  console.log(`  Rate limit: ${RATE_LIMIT_RPM > 0 ? `${RATE_LIMIT_RPM} req/min` : 'disabled'}`);
-  console.log(`  CORS:       ${CORS_ORIGIN}`);
-  console.log(`  Timeout:    ${REQUEST_TIMEOUT / 1000}s`);
+  console.log(`  Auth:         ${PROXY_API_KEY      ? 'enabled'                   : 'disabled'}`);
+  console.log(`  Rate limit:   ${RATE_LIMIT_RPM > 0 ? `${RATE_LIMIT_RPM} req/min` : 'disabled'}`);
+  console.log(`  CORS:         ${CORS_ORIGIN}`);
+  console.log(`  Timeout:      ${REQUEST_TIMEOUT / 1000}s`);
   console.log(`  ─────────────────────────────────────`);
-  console.log(`  Dashboard:  http://localhost:${PORT}/dashboard`);
-  console.log(`  Health:     http://localhost:${PORT}/health\n`);
+  console.log(`  Dashboard:    http://localhost:${PORT}/dashboard`);
+  console.log(`  Health:       http://localhost:${PORT}/health\n`);
 });
